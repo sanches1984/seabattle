@@ -9,37 +9,52 @@ import (
 // 1 - корабль
 // -1 - не попал
 // -2 - подбитый корабль
-var matrix [][]int
-var matrixSize int
-var isGameStarted = false
-var shipsInfo model.ShipList
-var shotCount uint
 
-func IsGameStarted() bool {
-	return isGameStarted
+type IClient interface {
+	Clear()
+	IsStarted() bool
+	CreateShips(ships model.ShipList) error
+	MakeShot(shot *model.Shot) (*model.ShotResponse, error)
+	GetStat() *model.StateResponse
+	GetInfo() string
 }
 
-func NewGame(size uint) {
-	isGameStarted = false
-	shotCount = 0
-	shipsInfo = model.ShipList{}
-	matrixSize = int(size)
-	matrix = createMatrix()
+type client struct {
+	matrix    [][]int
+	size      int
+	started   bool
+	ships     model.ShipList
+	shotCount uint
 }
 
-func ClearGame() {
-	isGameStarted = true
-	shotCount = 0
-	shipsInfo.ResetHits()
-	clearMatrix()
+func NewGame(size uint) IClient {
+	c := &client{
+		size:      int(size),
+		started:   false,
+		ships:     model.ShipList{},
+		shotCount: 0,
+	}
+	c.matrix = c.createMatrix()
+	return c
 }
 
-func CreateShips(ships model.ShipList) error {
+func (c *client) Clear() {
+	c.started = true
+	c.shotCount = 0
+	c.ships.ResetHits()
+	c.clearMatrix()
+}
+
+func (c client) IsStarted() bool {
+	return c.started
+}
+
+func (c *client) CreateShips(ships model.ShipList) error {
 	// создаем временное поле для проверки пересечения кораблей и выхода за пределы поля
-	tempMatrix := createMatrix()
+	tempMatrix := c.createMatrix()
 	for _, ship := range ships {
 		ship.SetHits()
-		if ship.OverField(uint(matrixSize)) {
+		if ship.OverField(uint(c.size)) {
 			return fmt.Errorf("Ship out of field")
 		}
 
@@ -54,76 +69,76 @@ func CreateShips(ships model.ShipList) error {
 	}
 
 	// корабли поставились нормально, ставим на настоящее поле
-	matrix = tempMatrix
-	shipsInfo = ships
-	isGameStarted = true
+	c.matrix = tempMatrix
+	c.ships = ships
+	c.started = true
 	return nil
 }
 
-func MakeShot(shot *model.Shot) (*model.ShotResponse, error) {
-	if shot.OverField(uint(matrixSize)) {
+func (c *client) MakeShot(shot *model.Shot) (*model.ShotResponse, error) {
+	if shot.OverField(uint(c.size)) {
 		return nil, fmt.Errorf("Shot out of field")
 	}
 
 	isHit := false
-	switch matrix[shot.X][shot.Y] {
+	switch c.matrix[shot.X][shot.Y] {
 	case 0:
-		matrix[shot.X][shot.Y] = -1
+		c.matrix[shot.X][shot.Y] = -1
 	case 1:
-		matrix[shot.X][shot.Y] = -2
+		c.matrix[shot.X][shot.Y] = -2
 		isHit = true
 	default:
 		return nil, fmt.Errorf("Bad shot")
 	}
 
-	shotCount++
+	c.shotCount++
 	response := &model.ShotResponse{}
 	if isHit {
 		response.Knock = true
-		response.Destroy = shipsInfo.MakeDamage(shot)
-		response.End = shipsInfo.AllShipsDestroyed()
+		response.Destroy = c.ships.MakeDamage(shot)
+		response.End = c.ships.AllShipsDestroyed()
 		if response.End {
-			isGameStarted = false
+			c.started = false
 		}
 	}
 
 	return response, nil
 }
 
-func GetStat() *model.StateResponse {
+func (c client) GetStat() *model.StateResponse {
 	return &model.StateResponse{
-		ShipCount: len(shipsInfo),
-		Destroyed: shipsInfo.Destroyed(),
-		Knocked:   shipsInfo.Knocked(),
-		ShotCount: int(shotCount),
+		ShipCount: len(c.ships),
+		Destroyed: c.ships.Destroyed(),
+		Knocked:   c.ships.Knocked(),
+		ShotCount: int(c.shotCount),
 	}
 }
 
-func GetInfo() string {
+func (c client) GetInfo() string {
 	str := "+--+"
-	for i := 0; i < matrixSize; i++ {
+	for i := 0; i < c.size; i++ {
 		str += "-"
 	}
 	str += "+\n|  |"
 	// печатаем первую строку
-	for i := 0; i < matrixSize; i++ {
+	for i := 0; i < c.size; i++ {
 		// конвертируем в ASCII
 		str += string(rune(i + 65))
 	}
 	str += "|\n+--+"
-	for i := 0; i < matrixSize; i++ {
+	for i := 0; i < c.size; i++ {
 		str += "-"
 	}
 	str += "+\n"
 
-	for i := 0; i < matrixSize; i++ {
+	for i := 0; i < c.size; i++ {
 		str += "|"
 		if i+1 < 10 {
 			str += "0"
 		}
 		str += fmt.Sprintf("%d|", i+1)
-		for j := 0; j < matrixSize; j++ {
-			switch matrix[i][j] {
+		for j := 0; j < c.size; j++ {
+			switch c.matrix[i][j] {
 			case 0:
 				str += " "
 			case 1:
@@ -138,29 +153,29 @@ func GetInfo() string {
 	}
 
 	str += "+--+"
-	for i := 0; i < matrixSize; i++ {
+	for i := 0; i < c.size; i++ {
 		str += "-"
 	}
 	str += "+\n"
 	return str
 }
 
-func createMatrix() [][]int {
-	matrix := make([][]int, matrixSize)
-	for i := 0; i < matrixSize; i++ {
-		matrix[i] = make([]int, matrixSize)
+func (c *client) createMatrix() [][]int {
+	matrix := make([][]int, c.size)
+	for i := 0; i < c.size; i++ {
+		matrix[i] = make([]int, c.size)
 	}
 	return matrix
 }
 
-func clearMatrix() {
-	for i := 0; i < matrixSize; i++ {
-		for j := 0; j < matrixSize; j++ {
-			switch matrix[i][j] {
+func (c *client) clearMatrix() {
+	for i := 0; i < c.size; i++ {
+		for j := 0; j < c.size; j++ {
+			switch c.matrix[i][j] {
 			case -1:
-				matrix[i][j] = 0
+				c.matrix[i][j] = 0
 			case -2:
-				matrix[i][j] = 1
+				c.matrix[i][j] = 1
 			}
 		}
 	}

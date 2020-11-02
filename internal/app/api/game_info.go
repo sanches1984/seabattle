@@ -1,7 +1,6 @@
 package api
 
 import (
-	"github.com/sanches1984/seabattle/internal/app/game"
 	"net/http"
 )
 
@@ -12,5 +11,7 @@ func GameInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(game.GetInfo()))
+	if client != nil {
+		w.Write([]byte(client.GetInfo()))
+	}
 }

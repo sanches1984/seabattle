@@ -3,7 +3,6 @@ package api
 import (
 	"fmt"
 	logger "github.com/sanches1984/gopkg-logger"
-	"github.com/sanches1984/seabattle/internal/app/game"
 	"github.com/sanches1984/seabattle/internal/app/model"
 	"net/http"
 )
@@ -15,22 +14,23 @@ func Shot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Debug(logger.App, "Shot")
-	if !game.IsGameStarted() {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write(model.NewError(fmt.Errorf("Game not started or already ended")))
+	if client == nil {
+		prepareBadRequest(w, fmt.Errorf("Game not created"))
+		return
+	}
+	if !client.IsStarted() {
+		prepareBadRequest(w, fmt.Errorf("Game not started or already ended"))
 		return
 	}
 	request, err := model.NewShotRequest(r)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write(model.NewError(err))
+		prepareBadRequest(w, err)
 		return
 	}
 
-	response, err := game.MakeShot(request.GetShot())
+	response, err := client.MakeShot(request.GetShot())
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write(model.NewError(err))
+		prepareBadRequest(w, err)
 		return
 	}
 
